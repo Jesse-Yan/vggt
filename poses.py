@@ -30,11 +30,9 @@ if scenario is None:
     scenario = scenario_folders[0]
 scenario_path = os.path.join(mode_path, scenario)
 
-# Loop through each timestamp in the list
+image_names = [] # Initialize list before the loop
+# Loop through each timestamp to collect image paths
 for timestamp in timestamps:
-    print(f"--- Processing Timestamp: {timestamp} ---") # Added simple separator
-
-    image_names = [] # Initialize image_names inside the loop
     for vehicle_id in vehicle_ids:
         vehicle_path = os.path.join(scenario_path, vehicle_id)
         for camera in cameras:
@@ -43,29 +41,22 @@ for timestamp in timestamps:
                 image_path = os.path.join(vehicle_path, f"{timestamp}_{camera}.png")
                 image_names.append(image_path)
 
-    print(image_names)
+# Process the combined list after the loop
+print(image_names)
 
-    # Check if image_names is empty for the current timestamp before proceeding
-    if not image_names:
-        print(f"Warning: No images found for timestamp {timestamp}. Skipping.")
-        continue
+# Original processing logic now runs on the combined list
+images = load_and_preprocess_images(image_names).to(device)
 
-    images = load_and_preprocess_images(image_names).to(device)
+with torch.no_grad():
+    with torch.cuda.amp.autocast(dtype=dtype):
+        images = images[None]  # add batch dimension
+        aggregated_tokens_list, ps_idx = model.aggregator(images)
 
-    with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
-            images = images[None]  # add batch dimension
-            aggregated_tokens_list, ps_idx = model.aggregator(images)
+        # Predict Cameras
+        pose_enc = model.camera_head(aggregated_tokens_list)[-1]
+        # Extrinsic and intrinsic matrices, following OpenCV convention (camera from world)
+        extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
 
-            # Predict Cameras
-            pose_enc = model.camera_head(aggregated_tokens_list)[-1]
-            # Extrinsic and intrinsic matrices, following OpenCV convention (camera from world)
-            extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
-
-            print("Extrinsic matrices:")
-            print(extrinsic.shape)
-            print(extrinsic)
-
-            print("Intrinsic matrices:")
-            print(intrinsic.shape)
-            print(intrinsic)
+        print("Extrinsic matrices:")
+        print(extrinsic.shape)
+        print(extrinsic)
