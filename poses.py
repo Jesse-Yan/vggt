@@ -111,10 +111,4 @@ with open(pred_filename, 'w') as f:
         f.write(line + '\n')
 print(f"Predicted poses for evo saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
 
-if gt_tum_lines and pred_tum_lines:
-    print("\nTo compare using evo, run a command like this in your terminal:")
-    print(f"evo_ape tum {gt_filename} {pred_filename} -va --plot --save_results evo_results.zip")
-else:
-    print("\nNo valid pose pairs were generated for evo comparison.")
-
 print("\n--- Finished processing ---")
