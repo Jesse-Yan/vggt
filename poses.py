@@ -2,10 +2,21 @@ import torch
 import os
 import yaml
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
+
+def pose_to_matrix(pose):
+    x, y, z, roll, pitch, yaw = pose
+    t = np.array([x, y, z])
+    rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
+    R_matrix = rot.as_matrix()
+    T = np.eye(4)
+    T[:3, :3] = R_matrix
+    T[:3, 3] = t
+    return T # Returns T_W_L
 
 def calculate_pose_error(pred_extrinsic_3x4, gt_extrinsic_4x4):
     gt = np.array(gt_extrinsic_4x4)
@@ -32,7 +43,6 @@ base_path = "dataset/v2x_vit"
 mode = "train"
 scenario = "2021_08_18_21_38_28"
 vehicle_ids = ["8786"]
-# vehicle_ids = ["8786", "8795"]
 timestamps = ["000068", "000070"]
 cameras = ["camera0", "camera1", "camera2", "camera3"]
 camera_enabled = {
@@ -54,6 +64,7 @@ image_names = []
 gt_extrinsics_ordered = []
 camera_names_ordered = []
 yaml_data_cache = {}
+lidar_world_to_lidar_cache = {}
 
 for timestamp in timestamps:
     for vehicle_id in vehicle_ids:
@@ -61,9 +72,15 @@ for timestamp in timestamps:
         if yaml_key not in yaml_data_cache:
              yaml_path = os.path.join(scenario_path, vehicle_id, f"{timestamp}.yaml")
              with open(yaml_path, 'r') as f:
-                 yaml_data_cache[yaml_key] = yaml.safe_load(f)
+                 yaml_content = yaml.safe_load(f)
+             yaml_data_cache[yaml_key] = yaml_content
+             lidar_pose_6d = yaml_content['lidar_pose']
+             M_lidar_pose_W_L = pose_to_matrix(lidar_pose_6d) # T_W_L
+             T_L_W = np.linalg.inv(M_lidar_pose_W_L) # T_L_W = inv(T_W_L)
+             lidar_world_to_lidar_cache[yaml_key] = T_L_W
 
         current_vehicle_yaml = yaml_data_cache[yaml_key]
+        T_L_W = lidar_world_to_lidar_cache[yaml_key]
         vehicle_path = os.path.join(scenario_path, vehicle_id)
 
         for camera in cameras:
@@ -72,11 +89,15 @@ for timestamp in timestamps:
                 image_names.append(image_path)
                 camera_names_ordered.append(f"{vehicle_id}_{timestamp}_{camera}")
 
-                gt_extrinsic = None
+                final_gt_C_W = None
                 if current_vehicle_yaml and camera in current_vehicle_yaml:
                      if 'extrinsic' in current_vehicle_yaml[camera]:
-                          gt_extrinsic = current_vehicle_yaml[camera]['extrinsic']
-                gt_extrinsics_ordered.append(gt_extrinsic)
+                          M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic']) # T_L_C
+                          T_C_L = np.linalg.inv(M_yaml_extrinsic_L_C) # T_C_L = inv(T_L_C)
+                          final_gt_C_W = T_C_L @ T_L_W # GT T_C_W = T_C_L * T_L_W
+
+                gt_extrinsics_ordered.append(final_gt_C_W)
+
 
 print(f"Processing {len(image_names)} images from {len(timestamps)} timestamps simultaneously...")
 images = load_and_preprocess_images(image_names).to(device)
@@ -88,7 +109,8 @@ with torch.no_grad():
         pose_enc = model.camera_head(aggregated_tokens_list)[-1]
         pred_extrinsic, pred_intrinsic = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
 
-print(f"\nComparison Results (Processed Simultaneously)")
+
+print(f"\nComparison Results (Processed Simultaneously, using lidar_pose)")
 all_errors = {'trans': [], 'rot': []}
 total_images = pred_extrinsic.shape[1]
 
@@ -104,9 +126,10 @@ for i in range(total_images):
      all_errors['trans'].append(trans_err)
      all_errors['rot'].append(rot_err)
 
+
 overall_avg_trans = np.mean(all_errors['trans'])
 overall_avg_rot = np.mean(all_errors['rot'])
-print("\n--- Overall Average Errors (Simultaneous Processing) ---")
+print("\n--- Overall Average Errors (Simultaneous Processing, using lidar_pose) ---")
 print(f"Overall Avg Translation Error: {overall_avg_trans:.4f}")
 print(f"Overall Avg Rotation Error (deg): {overall_avg_rot:.4f}")
 
