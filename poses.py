@@ -8,29 +8,11 @@ from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
-def pose_to_matrix(pose):
-    x, y, z, roll, pitch, yaw = pose
-    t = np.array([x, y, z])
-    rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
-    R_matrix = rot.as_matrix()
-    T = np.eye(4)
-    T[:3, :3] = R_matrix
-    T[:3, 3] = t
-    return T # Returns T_W_L
-
-def calculate_pose_error(pred_extrinsic_3x4, gt_extrinsic_4x4):
-    gt = np.array(gt_extrinsic_4x4)
-    pred = pred_extrinsic_3x4.detach().cpu().numpy()
-    R_pred = pred[:3, :3]
-    t_pred = pred[:3, 3]
-    R_gt = gt[:3, :3]
-    t_gt = gt[:3, 3]
-    translation_error = np.linalg.norm(t_pred - t_gt)
-    r_rel = R_pred @ R_gt.T
-    trace = np.clip(np.trace(r_rel), -1.0, 3.0)
-    rotation_error_rad = np.arccos((trace - 1.0) / 2.0)
-    rotation_error_deg = np.degrees(rotation_error_rad)
-    return translation_error, rotation_error_deg
+def matrix_to_tum_line(matrix_4x4, timestamp_id):
+    t = matrix_4x4[:3, 3]
+    R_mat = matrix_4x4[:3, :3]
+    q = R.from_matrix(R_mat).as_quat()
+    return f"{timestamp_id} {t[0]} {t[1]} {t[2]} {q[0]} {q[1]} {q[2]} {q[3]}"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8 else torch.float16
@@ -41,9 +23,9 @@ print("Model loaded.")
 
 base_path = "dataset/v2x_vit"
 mode = "train"
-scenario = "2021_08_18_21_38_28"
-vehicle_ids = ["8786"]
-timestamps = ["000068", "000070"]
+scenario = "2021_08_22_07_24_12"
+vehicle_ids = ["5274", "5292"]
+timestamps = ["000078"]
 cameras = ["camera0", "camera1", "camera2", "camera3"]
 camera_enabled = {
     "camera0": True,
@@ -64,7 +46,6 @@ image_names = []
 gt_extrinsics_ordered = []
 camera_names_ordered = []
 yaml_data_cache = {}
-lidar_world_to_lidar_cache = {}
 
 for timestamp in timestamps:
     for vehicle_id in vehicle_ids:
@@ -74,13 +55,8 @@ for timestamp in timestamps:
              with open(yaml_path, 'r') as f:
                  yaml_content = yaml.safe_load(f)
              yaml_data_cache[yaml_key] = yaml_content
-             lidar_pose_6d = yaml_content['lidar_pose']
-             M_lidar_pose_W_L = pose_to_matrix(lidar_pose_6d) # T_W_L
-             T_L_W = np.linalg.inv(M_lidar_pose_W_L) # T_L_W = inv(T_W_L)
-             lidar_world_to_lidar_cache[yaml_key] = T_L_W
 
         current_vehicle_yaml = yaml_data_cache[yaml_key]
-        T_L_W = lidar_world_to_lidar_cache[yaml_key]
         vehicle_path = os.path.join(scenario_path, vehicle_id)
 
         for camera in cameras:
@@ -89,17 +65,13 @@ for timestamp in timestamps:
                 image_names.append(image_path)
                 camera_names_ordered.append(f"{vehicle_id}_{timestamp}_{camera}")
 
-                final_gt_C_W = None
+                gt_extrinsic = None
                 if current_vehicle_yaml and camera in current_vehicle_yaml:
                      if 'extrinsic' in current_vehicle_yaml[camera]:
-                          M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic']) # T_L_C
-                          T_C_L = np.linalg.inv(M_yaml_extrinsic_L_C) # T_C_L = inv(T_L_C)
-                          final_gt_C_W = T_C_L @ T_L_W # GT T_C_W = T_C_L * T_L_W
+                          gt_extrinsic = np.array(current_vehicle_yaml[camera]['extrinsic'])
+                gt_extrinsics_ordered.append(gt_extrinsic)
 
-                gt_extrinsics_ordered.append(final_gt_C_W)
-
-
-print(f"Processing {len(image_names)} images from {len(timestamps)} timestamps simultaneously...")
+print(f"Processing {len(image_names)} images simultaneously...")
 images = load_and_preprocess_images(image_names).to(device)
 
 with torch.no_grad():
@@ -107,30 +79,42 @@ with torch.no_grad():
         images_batch = images[None]
         aggregated_tokens_list, ps_idx = model.aggregator(images_batch)
         pose_enc = model.camera_head(aggregated_tokens_list)[-1]
-        pred_extrinsic, pred_intrinsic = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
+        pred_extrinsic, _ = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
 
-
-print(f"\nComparison Results (Processed Simultaneously, using lidar_pose)")
-all_errors = {'trans': [], 'rot': []}
+gt_tum_lines = []
+pred_tum_lines = []
 total_images = pred_extrinsic.shape[1]
 
 for i in range(total_images):
-     camera_id_name = camera_names_ordered[i]
-     pred_matrix_3x4 = pred_extrinsic[0, i]
-     gt_matrix_4x4 = gt_extrinsics_ordered[i]
+    gt_matrix_4x4 = gt_extrinsics_ordered[i]
+    pred_matrix_3x4_tensor = pred_extrinsic[0, i]
 
-     print(f"  Camera: {camera_id_name}")
-     trans_err, rot_err = calculate_pose_error(pred_matrix_3x4, gt_matrix_4x4)
-     print(f"    Translation Error: {trans_err:.4f}")
-     print(f"    Rotation Error (deg): {rot_err:.4f}")
-     all_errors['trans'].append(trans_err)
-     all_errors['rot'].append(rot_err)
+    if gt_matrix_4x4 is not None:
+        pred_matrix_4x4 = np.eye(4)
+        pred_matrix_4x4[:3, :] = pred_matrix_3x4_tensor.detach().cpu().numpy()
+        timestamp_id = i
+        gt_line = matrix_to_tum_line(gt_matrix_4x4, timestamp_id)
+        pred_line = matrix_to_tum_line(pred_matrix_4x4, timestamp_id)
+        gt_tum_lines.append(gt_line)
+        pred_tum_lines.append(pred_line)
 
+gt_filename = "gt_poses.txt"
+pred_filename = "pred_poses.txt"
 
-overall_avg_trans = np.mean(all_errors['trans'])
-overall_avg_rot = np.mean(all_errors['rot'])
-print("\n--- Overall Average Errors (Simultaneous Processing, using lidar_pose) ---")
-print(f"Overall Avg Translation Error: {overall_avg_trans:.4f}")
-print(f"Overall Avg Rotation Error (deg): {overall_avg_rot:.4f}")
+with open(gt_filename, 'w') as f:
+    for line in gt_tum_lines:
+        f.write(line + '\n')
+print(f"Ground truth poses for evo saved to: {gt_filename} ({len(gt_tum_lines)} poses)")
+
+with open(pred_filename, 'w') as f:
+    for line in pred_tum_lines:
+        f.write(line + '\n')
+print(f"Predicted poses for evo saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
+
+if gt_tum_lines and pred_tum_lines:
+    print("\nTo compare using evo, run a command like this in your terminal:")
+    print(f"evo_ape tum {gt_filename} {pred_filename} -va --plot --save_results evo_results.zip")
+else:
+    print("\nNo valid pose pairs were generated for evo comparison.")
 
 print("\n--- Finished processing ---")
