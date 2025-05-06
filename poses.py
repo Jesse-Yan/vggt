@@ -36,8 +36,14 @@ base_path = "dataset/v2x_vit"
 mode = "train"
 scenario = "2021_08_22_07_24_12"
 ego_vehicle_id = "5274"
+# vehicle_ids = ["5274"]
 vehicle_ids = ["5274", "5292"]
-timestamps = ["000078"]
+base_timestamp = "000078" # Base timestamp for the ego vehicle
+timestamps = []
+for i in range(16):
+    # Generate timestamps based on the base timestamp
+    new_timestamp = str(int(base_timestamp) + i * 2).zfill(6)  # Increment by 2 for each step
+    timestamps.append(new_timestamp)
 cameras = ["camera0", "camera1", "camera2", "camera3"]
 camera_enabled = {
     "camera0": True,
