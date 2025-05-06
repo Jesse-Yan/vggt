@@ -34,6 +34,9 @@ camera_enabled = {
     "camera3": True
 }
 
+num_vehicles = len(vehicle_ids)
+num_timestamps = len(timestamps)
+
 mode_path = os.path.join(base_path, mode)
 
 if scenario is None:
@@ -71,7 +74,8 @@ for timestamp in timestamps:
                           gt_extrinsic = np.array(current_vehicle_yaml[camera]['extrinsic'])
                 gt_extrinsics_ordered.append(gt_extrinsic)
 
-print(f"Processing {len(image_names)} images simultaneously...")
+
+print(f"Processing {len(image_names)} images for {num_vehicles} vehicles and {num_timestamps} timestamps simultaneously...")
 images = load_and_preprocess_images(image_names).to(device)
 
 with torch.no_grad():
@@ -100,19 +104,26 @@ for i in range(total_images):
 
 base_output_dir = "evo_input"
 scenario_output_dir = os.path.join(base_output_dir, scenario)
-os.makedirs(scenario_output_dir, exist_ok=True)
 
-gt_filename = os.path.join(scenario_output_dir, "gt_poses.txt")
-pred_filename = os.path.join(scenario_output_dir, "pred_poses.txt")
+vehicle_folder_name = f"{num_vehicles}_vehicle" if num_vehicles == 1 else f"{num_vehicles}_vehicles"
+timestamp_folder_name = f"{num_timestamps}_timestamp" if num_timestamps == 1 else f"{num_timestamps}_timestamps"
+
+final_output_dir = os.path.join(scenario_output_dir, vehicle_folder_name, timestamp_folder_name)
+
+os.makedirs(final_output_dir, exist_ok=True)
+
+gt_filename = os.path.join(final_output_dir, "gt_poses.txt")
+pred_filename = os.path.join(final_output_dir, "pred_poses.txt")
 
 with open(gt_filename, 'w') as f:
     for line in gt_tum_lines:
         f.write(line + '\n')
-print(f"Ground truth poses for evo saved to: {gt_filename} ({len(gt_tum_lines)} poses)")
+print(f"Ground truth poses saved to: {gt_filename} ({len(gt_tum_lines)} poses)")
 
 with open(pred_filename, 'w') as f:
     for line in pred_tum_lines:
         f.write(line + '\n')
-print(f"Predicted poses for evo saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
+print(f"Predicted poses saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
+
 
 print("\n--- Finished processing ---")
