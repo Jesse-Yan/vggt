@@ -98,8 +98,12 @@ for i in range(total_images):
         gt_tum_lines.append(gt_line)
         pred_tum_lines.append(pred_line)
 
-gt_filename = "gt_poses.txt"
-pred_filename = "pred_poses.txt"
+base_output_dir = "evo_input"
+scenario_output_dir = os.path.join(base_output_dir, scenario)
+os.makedirs(scenario_output_dir, exist_ok=True)
+
+gt_filename = os.path.join(scenario_output_dir, "gt_poses.txt")
+pred_filename = os.path.join(scenario_output_dir, "pred_poses.txt")
 
 with open(gt_filename, 'w') as f:
     for line in gt_tum_lines:
