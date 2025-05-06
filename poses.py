@@ -8,7 +8,18 @@ from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
+def pose_to_matrix(pose):
+    x, y, z, roll, pitch, yaw = pose
+    t = np.array([x, y, z])
+    rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
+    R_matrix = rot.as_matrix()
+    T = np.eye(4)
+    T[:3, :3] = R_matrix
+    T[:3, 3] = t
+    return T # Returns T_W_L
+
 def matrix_to_tum_line(matrix_4x4, timestamp_id):
+    # Assumes input is T_W_C (Camera-to-World)
     t = matrix_4x4[:3, 3]
     R_mat = matrix_4x4[:3, :3]
     q = R.from_matrix(R_mat).as_quat()
@@ -24,8 +35,8 @@ print("Model loaded.")
 base_path = "dataset/v2x_vit"
 mode = "train"
 scenario = "2021_08_22_07_24_12"
-ego_vehicle_id = "5274" # Define the ego vehicle ID
-vehicle_ids = ["5274", "5292"] # All vehicles used for input
+ego_vehicle_id = "5274"
+vehicle_ids = ["5274", "5292"]
 timestamps = ["000078"]
 cameras = ["camera0", "camera1", "camera2", "camera3"]
 camera_enabled = {
@@ -47,9 +58,10 @@ if scenario is None:
 scenario_path = os.path.join(mode_path, scenario)
 
 image_names = []
-gt_extrinsics_ordered = []
+gt_extrinsics_ordered = [] # Stores calculated GT T_W_C
 camera_names_ordered = []
 yaml_data_cache = {}
+lidar_pose_cache = {} # Stores T_W_L matrices
 
 for timestamp in timestamps:
     for vehicle_id in vehicle_ids:
@@ -59,8 +71,12 @@ for timestamp in timestamps:
              with open(yaml_path, 'r') as f:
                  yaml_content = yaml.safe_load(f)
              yaml_data_cache[yaml_key] = yaml_content
+             lidar_pose_6d = yaml_content['lidar_pose']
+             M_lidar_pose_W_L = pose_to_matrix(lidar_pose_6d) # T_W_L
+             lidar_pose_cache[yaml_key] = M_lidar_pose_W_L # Store T_W_L
 
         current_vehicle_yaml = yaml_data_cache[yaml_key]
+        T_W_L = lidar_pose_cache[yaml_key] # Get T_W_L for this group
         vehicle_path = os.path.join(scenario_path, vehicle_id)
 
         for camera in cameras:
@@ -69,11 +85,15 @@ for timestamp in timestamps:
                 image_names.append(image_path)
                 camera_names_ordered.append(f"{vehicle_id}_{timestamp}_{camera}")
 
-                gt_extrinsic = None
+                final_gt_W_C = None # Initialize GT Camera-to-World
                 if current_vehicle_yaml and camera in current_vehicle_yaml:
                      if 'extrinsic' in current_vehicle_yaml[camera]:
-                          gt_extrinsic = np.array(current_vehicle_yaml[camera]['extrinsic'])
-                gt_extrinsics_ordered.append(gt_extrinsic)
+                          # Assume YAML extrinsic is T_L_C (Camera-to-LiDAR)
+                          M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic'])
+                          # Calculate GT T_W_C = T_W_L * T_L_C
+                          final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
+
+                gt_extrinsics_ordered.append(final_gt_W_C) # Append calculated T_W_C (or None)
 
 
 print(f"Processing {len(image_names)} images for {num_vehicles} vehicles (Ego: {ego_vehicle_id}) and {num_timestamps} timestamps simultaneously...")
@@ -84,33 +104,36 @@ with torch.no_grad():
         images_batch = images[None]
         aggregated_tokens_list, ps_idx = model.aggregator(images_batch)
         pose_enc = model.camera_head(aggregated_tokens_list)[-1]
+        # pred_extrinsic is predicted T_W_C (Camera-to-World)
         pred_extrinsic, _ = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
 
-# --- Prepare data for evo (FILTERED for ego vehicle) ---
+
 gt_tum_lines = []
 pred_tum_lines = []
 total_images = pred_extrinsic.shape[1]
 
 for i in range(total_images):
-    gt_matrix_4x4 = gt_extrinsics_ordered[i]
-    pred_matrix_3x4_tensor = pred_extrinsic[0, i]
-    full_camera_name = camera_names_ordered[i] # Format: "vehicle_timestamp_camera"
+    gt_matrix_4x4_W_C = gt_extrinsics_ordered[i] # Calculated GT T_W_C (4x4) or None
+    pred_matrix_3x4_tensor_W_C = pred_extrinsic[0, i] # Predicted T_W_C (3x4)
+    full_camera_name = camera_names_ordered[i]
 
-    # --- Filtering Step ---
-    # Extract vehicle ID from the name
     vehicle_id_from_name = full_camera_name.split('_')[0]
 
-    # Process only if GT exists AND it's the ego vehicle
-    if gt_matrix_4x4 is not None and vehicle_id_from_name == ego_vehicle_id:
-        pred_matrix_4x4 = np.eye(4)
-        pred_matrix_4x4[:3, :] = pred_matrix_3x4_tensor.detach().cpu().numpy()
-        timestamp_id = i # Using original index i for TUM timestamp ID
-        gt_line = matrix_to_tum_line(gt_matrix_4x4, timestamp_id)
-        pred_line = matrix_to_tum_line(pred_matrix_4x4, timestamp_id)
+    # Filter for ego vehicle and valid GT
+    if gt_matrix_4x4_W_C is not None and vehicle_id_from_name == ego_vehicle_id:
+        # Convert prediction T_W_C to 4x4 numpy
+        pred_matrix_4x4_W_C = np.eye(4)
+        pred_matrix_4x4_W_C[:3, :] = pred_matrix_3x4_tensor_W_C.detach().cpu().numpy()
+
+        timestamp_id = i
+
+        # Convert both T_W_C matrices to TUM lines
+        gt_line = matrix_to_tum_line(gt_matrix_4x4_W_C, timestamp_id)
+        pred_line = matrix_to_tum_line(pred_matrix_4x4_W_C, timestamp_id)
+
         gt_tum_lines.append(gt_line)
         pred_tum_lines.append(pred_line)
 
-# --- File Saving Logic (Directory structure reflects INPUT conditions) ---
 base_output_dir = "evo_input"
 scenario_output_dir = os.path.join(base_output_dir, scenario)
 vehicle_folder_name = f"{num_vehicles}_vehicle" if num_vehicles == 1 else f"{num_vehicles}_vehicles"
@@ -125,13 +148,12 @@ pred_filename = os.path.join(final_output_dir, "pred_poses.txt")
 with open(gt_filename, 'w') as f:
     for line in gt_tum_lines:
         f.write(line + '\n')
-# Print the count of poses actually saved (ego vehicle only)
 print(f"Ground truth poses (Ego vehicle only) saved to: {gt_filename} ({len(gt_tum_lines)} poses)")
 
 with open(pred_filename, 'w') as f:
     for line in pred_tum_lines:
         f.write(line + '\n')
-# Print the count of poses actually saved (ego vehicle only)
 print(f"Predicted poses (Ego vehicle only) saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
+
 
 print("\n--- Finished processing ---")
