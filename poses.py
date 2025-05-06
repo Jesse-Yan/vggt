@@ -47,8 +47,8 @@ for i in range(16):
 cameras = ["camera0", "camera1", "camera2", "camera3"]
 camera_enabled = {
     "camera0": True,
-    "camera1": True,
-    "camera2": True,
+    "camera1": False,
+    "camera2": False,
     "camera3": True
 }
 

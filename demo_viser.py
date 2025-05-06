@@ -63,7 +63,7 @@ def viser_wrapper(
     """
     print(f"Starting viser server on port {port}")
 
-    server = viser.ViserServer(host="0.0.0.0", port=port)
+    server = viser.ViserServer(host="0.0.0.0", port=port, bind_all=True)
     server.gui.configure_theme(titlebar_content=None, control_layout="collapsible")
 
     # Unpack prediction dict
