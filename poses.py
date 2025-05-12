@@ -9,7 +9,7 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
 def pose_to_matrix(pose):
-    x, y, z, roll, pitch, yaw = pose
+    x, y, z, roll, yaw, pitch = pose
     t = np.array([x, y, z])
     rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
     R_matrix = rot.as_matrix()
