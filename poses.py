@@ -97,7 +97,8 @@ for timestamp in timestamps:
                           # Assume YAML extrinsic is T_L_C (Camera-to-LiDAR)
                           M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic'])
                           # Calculate GT T_W_C = T_W_L * T_L_C
-                          final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
+                          final_gt_W_C = M_yaml_extrinsic_L_C
+                        #   final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
 
                 gt_extrinsics_ordered.append(final_gt_W_C) # Append calculated T_W_C (or None)
 
