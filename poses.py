@@ -9,7 +9,7 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
 def pose_to_matrix(pose):
-    x, y, z, roll, pitch, yaw = pose
+    x, y, z, roll, yaw, pitch = pose
     t = np.array([x, y, z])
     rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
     R_matrix = rot.as_matrix()
@@ -97,8 +97,7 @@ for timestamp in timestamps:
                           # Assume YAML extrinsic is T_L_C (Camera-to-LiDAR)
                           M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic'])
                           # Calculate GT T_W_C = T_W_L * T_L_C
-                          final_gt_W_C = M_yaml_extrinsic_L_C
-                        #   final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
+                          final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
 
                 gt_extrinsics_ordered.append(final_gt_W_C) # Append calculated T_W_C (or None)
 
