@@ -31,16 +31,29 @@ dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.get_device_ca
 print("Loading model...")
 model = VGGT.from_pretrained("facebook/VGGT-1B").to(device)
 print("Model loaded.")
+if False:
+    base_path = "dataset/v2x_vit"
+    mode = "train"
+    scenario = "2021_08_22_07_24_12"
+    ego_vehicle_id = "5274"
+    # vehicle_ids = ["5274"]
+    vehicle_ids = ["5274", "5292"]
+    base_timestamp = "000078" # Base timestamp for the ego vehicle
 
-base_path = "dataset/v2x_vit"
-mode = "train"
-scenario = "2021_08_22_07_24_12"
-ego_vehicle_id = "5274"
-# vehicle_ids = ["5274"]
-vehicle_ids = ["5274", "5292"]
-base_timestamp = "000078" # Base timestamp for the ego vehicle
+if True:
+    base_path = "dataset/v2x_vit"
+    mode = "train"
+    scenario = "2021_08_23_13_10_47"
+    ego_vehicle_id = "7694"
+    # vehicle_ids = ["7694"]
+    vehicle_ids = ["7694", "7703"]
+    base_timestamp = "000098" # Base timestamp for the ego vehicle
+
+
+num_frames = 16
+
 timestamps = []
-for i in range(16):
+for i in range(num_frames):
     # Generate timestamps based on the base timestamp
     new_timestamp = str(int(base_timestamp) + i * 2).zfill(6)  # Increment by 2 for each step
     timestamps.append(new_timestamp)
