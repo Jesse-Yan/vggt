@@ -8,16 +8,6 @@ from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
-def pose_to_matrix(pose):
-    x, y, z, roll, yaw, pitch = pose
-    t = np.array([x, y, z])
-    rot = R.from_euler('zyx', [yaw, pitch, roll], degrees=True)
-    R_matrix = rot.as_matrix()
-    T = np.eye(4)
-    T[:3, :3] = R_matrix
-    T[:3, 3] = t
-    return T # Returns T_W_L
-
 def matrix_to_tum_line(matrix_4x4, timestamp_id):
     # Assumes input is T_W_C (Camera-to-World)
     t = matrix_4x4[:3, 3]
@@ -80,7 +70,6 @@ image_names = []
 gt_extrinsics_ordered = [] # Stores calculated GT T_W_C
 camera_names_ordered = []
 yaml_data_cache = {}
-lidar_pose_cache = {} # Stores T_W_L matrices
 
 for timestamp in timestamps:
     for vehicle_id in vehicle_ids:
@@ -90,12 +79,8 @@ for timestamp in timestamps:
              with open(yaml_path, 'r') as f:
                  yaml_content = yaml.safe_load(f)
              yaml_data_cache[yaml_key] = yaml_content
-             lidar_pose_6d = yaml_content['lidar_pose']
-             M_lidar_pose_W_L = pose_to_matrix(lidar_pose_6d) # T_W_L
-             lidar_pose_cache[yaml_key] = M_lidar_pose_W_L # Store T_W_L
 
         current_vehicle_yaml = yaml_data_cache[yaml_key]
-        T_W_L = lidar_pose_cache[yaml_key] # Get T_W_L for this group
         vehicle_path = os.path.join(scenario_path, vehicle_id)
 
         for camera in cameras:
@@ -104,14 +89,11 @@ for timestamp in timestamps:
                 image_names.append(image_path)
                 camera_names_ordered.append(f"{vehicle_id}_{timestamp}_{camera}")
 
-                final_gt_W_C = None # Initialize GT Camera-to-World
+                final_gt_W_C = None 
                 if current_vehicle_yaml and camera in current_vehicle_yaml:
                      if 'extrinsic' in current_vehicle_yaml[camera]:
-                          # Assume YAML extrinsic is T_L_C (Camera-to-LiDAR)
                           M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic'])
-                          # Calculate GT T_W_C = T_W_L * T_L_C
                           final_gt_W_C = M_yaml_extrinsic_L_C
-                        #   final_gt_W_C = T_W_L @ M_yaml_extrinsic_L_C
 
                 gt_extrinsics_ordered.append(final_gt_W_C) # Append calculated T_W_C (or None)
 
