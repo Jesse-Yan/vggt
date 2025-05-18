@@ -84,7 +84,7 @@ if False:
     vehicle_ids = ["409", "418"]
     base_timestamp = "000186" # Base timestamp for the ego vehicle
 
-if True:
+if False:
     base_path = "dataset/v2x_vit"
     mode = "train"
     scenario = "2021_08_23_22_31_01"
@@ -92,6 +92,33 @@ if True:
     # vehicle_ids = ["279"]
     vehicle_ids = ["279", "252"]
     base_timestamp = "000256" # Base timestamp for the ego vehicle
+
+if False:
+    base_path = "dataset/v2x_vit"
+    mode = "train"
+    scenario = "2021_08_23_23_08_17"
+    ego_vehicle_id = "565"
+    # vehicle_ids = ["565"]
+    vehicle_ids = ["565", "574"]
+    base_timestamp = "000189" # Base timestamp for the ego vehicle
+
+if False:
+    base_path = "dataset/v2x_vit"
+    mode = "train"
+    scenario = "2021_08_24_09_25_42"
+    ego_vehicle_id = "12963"
+    # vehicle_ids = ["12963"]
+    vehicle_ids = ["12963", "12954"]
+    base_timestamp = "000134" # Base timestamp for the ego vehicle
+
+if True:
+    base_path = "dataset/v2x_vit"
+    mode = "train"
+    scenario = "2021_08_24_09_58_32"
+    ego_vehicle_id = "13099"
+    # vehicle_ids = ["13099"]
+    vehicle_ids = ["13099", "13090"]
+    base_timestamp = "000226" # Base timestamp for the ego vehicle
 
 num_frames = 4
 
