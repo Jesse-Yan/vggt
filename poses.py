@@ -4,238 +4,223 @@ import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+# Assume vggt utility functions are available
 from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
-def matrix_to_tum_line(matrix_4x4, timestamp_id):
-    # Assumes input is T_W_C (Camera-to-World)
+SCENARIOS = {
+    "2021_08_22_07_24_12": {
+        "vehicle_ids": ["5274", "5292"], "ego_vehicle_id": "5274", "base_timestamp_ref": "000078", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [78, 80, 82, 84]}
+    },
+    "2021_08_23_13_10_47": {
+        "vehicle_ids": ["7694", "7703"], "ego_vehicle_id": "7694", "base_timestamp_ref": "000098", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [98, 100, 102, 104]}
+    },
+    "2021_08_21_09_09_41": {
+        "vehicle_ids": ["9224", "9206"], "ego_vehicle_id": "9224", "base_timestamp_ref": "000142", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [142, 144, 146, 148]}
+    },
+    "2021_08_22_09_43_53": {
+        "vehicle_ids": ["8323", "8332"], "ego_vehicle_id": "8323", "base_timestamp_ref": "000119", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [119, 121, 123, 125]}
+    },
+    "2021_08_22_10_10_40": {
+        "vehicle_ids": ["8482", "8464"], "ego_vehicle_id": "8482", "base_timestamp_ref": "000175", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [175, 177, 179, 181]}
+    },
+    "2021_08_23_12_13_48": {
+        "vehicle_ids": ["7365", "7356"], "ego_vehicle_id": "7365", "base_timestamp_ref": "000074", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [74, 76, 78, 80]}
+    },
+    "2021_08_23_20_47_11": {
+        "vehicle_ids": ["409", "418"], "ego_vehicle_id": "409", "base_timestamp_ref": "000186", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [186, 188, 190, 192]}
+    },
+    "2021_08_23_22_31_01": {
+        "vehicle_ids": ["279", "252"], "ego_vehicle_id": "279", "base_timestamp_ref": "000256", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [256, 258, 260, 262]}
+    },
+    "2021_08_23_23_08_17": {
+        "vehicle_ids": ["565", "574"], "ego_vehicle_id": "565", "base_timestamp_ref": "000189", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [189, 191, 193, 195]}
+    },
+    "2021_08_24_09_25_42": {
+        "vehicle_ids": ["12963", "12954"], "ego_vehicle_id": "12963", "base_timestamp_ref": "000134", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [134, 136, 138, 140]}
+    },
+    "2021_08_24_09_58_32": {
+        "vehicle_ids": ["13099", "13090"], "ego_vehicle_id": "13099", "base_timestamp_ref": "000226", "end_timestamp_ref": "PLACEHOLDER",
+        "timestamps_data": {0: [226, 228, 230, 232]}
+    }
+}
+
+# --- Helper Function ---
+def matrix_to_tum_line(matrix_4x4, timestamp_id_tum):
     t = matrix_4x4[:3, 3]
     R_mat = matrix_4x4[:3, :3]
     q = R.from_matrix(R_mat).as_quat()
-    return f"{timestamp_id} {t[0]} {t[1]} {t[2]} {q[0]} {q[1]} {q[2]} {q[3]}"
+    return f"{timestamp_id_tum} {t[0]} {t[1]} {t[2]} {q[0]} {q[1]} {q[2]} {q[3]}"
 
+# --- Global Settings ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8 else torch.float16
 
 print("Loading model...")
 model = VGGT.from_pretrained("facebook/VGGT-1B").to(device)
 print("Model loaded.")
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_22_07_24_12"
-    ego_vehicle_id = "5274"
-    # vehicle_ids = ["5274"]
-    vehicle_ids = ["5274", "5292"]
-    base_timestamp = "000078" # Base timestamp for the ego vehicle
 
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_23_13_10_47"
-    ego_vehicle_id = "7694"
-    # vehicle_ids = ["7694"]
-    vehicle_ids = ["7694", "7703"]
-    base_timestamp = "000098" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_21_09_09_41"
-    ego_vehicle_id = "9224"
-    # vehicle_ids = ["9224"]
-    vehicle_ids = ["9224", "9206"]
-    base_timestamp = "000142" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_22_09_43_53"
-    ego_vehicle_id = "8323"
-    # vehicle_ids = ["8323"]
-    vehicle_ids = ["8323", "8332"]
-    base_timestamp = "000119" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_22_10_10_40"
-    ego_vehicle_id = "8482"
-    # vehicle_ids = ["8482"]
-    vehicle_ids = ["8482", "8464"]
-    base_timestamp = "000175" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_23_12_13_48"
-    ego_vehicle_id = "7365"
-    # vehicle_ids = ["7365"]
-    vehicle_ids = ["7365", "7356"]
-    base_timestamp = "000074" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_23_20_47_11"
-    ego_vehicle_id = "409"
-    # vehicle_ids = ["409"]
-    vehicle_ids = ["409", "418"]
-    base_timestamp = "000186" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_23_22_31_01"
-    ego_vehicle_id = "279"
-    # vehicle_ids = ["279"]
-    vehicle_ids = ["279", "252"]
-    base_timestamp = "000256" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_23_23_08_17"
-    ego_vehicle_id = "565"
-    # vehicle_ids = ["565"]
-    vehicle_ids = ["565", "574"]
-    base_timestamp = "000189" # Base timestamp for the ego vehicle
-
-if False:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_24_09_25_42"
-    ego_vehicle_id = "12963"
-    # vehicle_ids = ["12963"]
-    vehicle_ids = ["12963", "12954"]
-    base_timestamp = "000134" # Base timestamp for the ego vehicle
-
-if True:
-    base_path = "dataset/v2x_vit"
-    mode = "train"
-    scenario = "2021_08_24_09_58_32"
-    ego_vehicle_id = "13099"
-    # vehicle_ids = ["13099"]
-    vehicle_ids = ["13099", "13090"]
-    base_timestamp = "000226" # Base timestamp for the ego vehicle
-
-num_frames = 4
-
-timestamps = []
-for i in range(num_frames):
-    # Generate timestamps based on the base timestamp
-    new_timestamp = str(int(base_timestamp) + i * 2).zfill(6)  # Increment by 2 for each step
-    timestamps.append(new_timestamp)
-cameras = ["camera0", "camera1", "camera2", "camera3"]
-camera_enabled = {
+BASE_PATH_GLOBAL = "dataset/v2x_vit"
+MODE_GLOBAL = "train"
+CAMERAS_GLOBAL = ["camera0", "camera1", "camera2", "camera3"]
+CAMERA_ENABLED_GLOBAL = {
     "camera0": True,
     "camera1": False,
     "camera2": False,
     "camera3": True
 }
+BASE_OUTPUT_DIR_GLOBAL = "evo_vggt"
 
-num_vehicles = len(vehicle_ids)
-num_timestamps = len(timestamps)
+# --- Main Processing Loop ---
+for scenario_name, scenario_config in SCENARIOS.items():
+    print(f"\n[SCENARIO]: {scenario_name}")
+    print("-----------------------------------")
 
-mode_path = os.path.join(base_path, mode)
+    ego_id_for_filter = scenario_config["ego_vehicle_id"]
+    all_vehicles_in_scenario_config = scenario_config["vehicle_ids"]
 
-if scenario is None:
-    scenario_folders = [f for f in os.listdir(mode_path) if os.path.isdir(os.path.join(mode_path, f))]
-    scenario = scenario_folders[0]
+    for timestamp_group_key, integer_timestamp_list in scenario_config["timestamps_data"].items():
+        
+        # Convert integer timestamps to zero-padded strings for this sequence group
+        current_sequence_timestamps_str = [str(ts_int).zfill(6) for ts_int in integer_timestamp_list]
+        num_frames_for_sequence = len(current_sequence_timestamps_str)
+        
+        print(f"  [TIMESTAMP_GROUP_ID]: {timestamp_group_key} (Sequence: {current_sequence_timestamps_str})")
 
-scenario_path = os.path.join(mode_path, scenario)
+        vehicle_run_cases = []
+        vehicle_run_cases.append({
+            "case_folder_suffix": "1_vehicle",
+            "vehicles_to_process": [ego_id_for_filter]
+        })
+        if set(all_vehicles_in_scenario_config) != set([ego_id_for_filter]):
+            vehicle_run_cases.append({
+                "case_folder_suffix": f"{len(all_vehicles_in_scenario_config)}_vehicles",
+                "vehicles_to_process": all_vehicles_in_scenario_config
+            })
+        
+        for run_case_config in vehicle_run_cases:
+            current_vehicle_case_folder_name = run_case_config["case_folder_suffix"]
+            current_vehicles_to_load_list = run_case_config["vehicles_to_process"]
+            
+            # Variables for this specific run, matching original script's context
+            # These will be used by the adapted original block logic
+            active_scenario_name = scenario_name
+            active_ego_vehicle_id = ego_id_for_filter
+            active_vehicle_ids_list = current_vehicles_to_load_list
+            active_timestamps_list_str = current_sequence_timestamps_str
+            
+            active_num_vehicles = len(active_vehicle_ids_list)
+            active_num_timestamps_in_sequence = num_frames_for_sequence # Renamed for clarity within block
 
-image_names = []
-gt_extrinsics_ordered = [] # Stores calculated GT T_W_C
-camera_names_ordered = []
-yaml_data_cache = {}
+            print(f"\n    [RUN_CASE]: {current_vehicle_case_folder_name} for timestamp_group {timestamp_group_key}")
+            print(f"      Vehicles: {active_vehicle_ids_list}, Timestamps: {active_timestamps_list_str}")
 
-for timestamp in timestamps:
-    for vehicle_id in vehicle_ids:
-        yaml_key = (vehicle_id, timestamp)
-        if yaml_key not in yaml_data_cache:
-             yaml_path = os.path.join(scenario_path, vehicle_id, f"{timestamp}.yaml")
-             with open(yaml_path, 'r') as f:
-                 yaml_content = yaml.safe_load(f)
-             yaml_data_cache[yaml_key] = yaml_content
+            # --- Adapted original script's core logic starts here ---
+            mode_path = os.path.join(BASE_PATH_GLOBAL, MODE_GLOBAL)
+            # scenario is now active_scenario_name, always provided
+            scenario_fs_path = os.path.join(mode_path, active_scenario_name)
 
-        current_vehicle_yaml = yaml_data_cache[yaml_key]
-        vehicle_path = os.path.join(scenario_path, vehicle_id)
+            image_names = []
+            gt_extrinsics_ordered = []
+            camera_names_ordered = []
+            yaml_data_cache = {}
 
-        for camera in cameras:
-            if camera_enabled.get(camera, False):
-                image_path = os.path.join(vehicle_path, f"{timestamp}_{camera}.png")
-                image_names.append(image_path)
-                camera_names_ordered.append(f"{vehicle_id}_{timestamp}_{camera}")
+            for timestamp_val_str in active_timestamps_list_str:
+                for vehicle_id_val in active_vehicle_ids_list:
+                    yaml_key = (vehicle_id_val, timestamp_val_str)
+                    if yaml_key not in yaml_data_cache:
+                        yaml_file_path = os.path.join(scenario_fs_path, vehicle_id_val, f"{timestamp_val_str}.yaml")
+                        with open(yaml_file_path, 'r') as f:
+                            yaml_content = yaml.safe_load(f)
+                        yaml_data_cache[yaml_key] = yaml_content
+                    
+                    current_vehicle_yaml_data = yaml_data_cache[yaml_key]
+                    vehicle_fs_path = os.path.join(scenario_fs_path, vehicle_id_val)
 
-                final_gt_W_C = None 
-                if current_vehicle_yaml and camera in current_vehicle_yaml:
-                     if 'extrinsic' in current_vehicle_yaml[camera]:
-                          M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml[camera]['extrinsic'])
-                          final_gt_W_C = M_yaml_extrinsic_L_C
+                    for camera_name_val in CAMERAS_GLOBAL:
+                        if CAMERA_ENABLED_GLOBAL.get(camera_name_val, False):
+                            image_file_path = os.path.join(vehicle_fs_path, f"{timestamp_val_str}_{camera_name_val}.png")
+                            image_names.append(image_file_path)
+                            camera_names_ordered.append(f"{vehicle_id_val}_{timestamp_val_str}_{camera_name_val}")
 
-                gt_extrinsics_ordered.append(final_gt_W_C) # Append calculated T_W_C (or None)
+                            final_gt_W_C = None 
+                            if current_vehicle_yaml_data and camera_name_val in current_vehicle_yaml_data:
+                                if 'extrinsic' in current_vehicle_yaml_data[camera_name_val]:
+                                    M_yaml_extrinsic_L_C = np.array(current_vehicle_yaml_data[camera_name_val]['extrinsic'])
+                                    final_gt_W_C = M_yaml_extrinsic_L_C
+                            gt_extrinsics_ordered.append(final_gt_W_C)
+            
+            if not image_names:
+                print(f"        No images collected for this run. Skipping.")
+                continue
 
+            print(f"        Processing {len(image_names)} images for {active_num_vehicles} vehicle(s) (Ego for TUM: {active_ego_vehicle_id}) and {active_num_timestamps_in_sequence} timestamps...")
+            
+            images = load_and_preprocess_images(image_names).to(device)
 
-print(f"Processing {len(image_names)} images for {num_vehicles} vehicles (Ego: {ego_vehicle_id}) and {num_timestamps} timestamps simultaneously...")
-images = load_and_preprocess_images(image_names).to(device)
+            with torch.no_grad():
+                with torch.cuda.amp.autocast(dtype=dtype):
+                    images_batch = images[None]
+                    aggregated_tokens_list, ps_idx = model.aggregator(images_batch)
+                    pose_enc = model.camera_head(aggregated_tokens_list)[-1]
+                    pred_extrinsic, _ = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
 
-with torch.no_grad():
-    with torch.cuda.amp.autocast(dtype=dtype):
-        images_batch = images[None]
-        aggregated_tokens_list, ps_idx = model.aggregator(images_batch)
-        pose_enc = model.camera_head(aggregated_tokens_list)[-1]
-        # pred_extrinsic is predicted T_W_C (Camera-to-World)
-        pred_extrinsic, _ = pose_encoding_to_extri_intri(pose_enc, images.shape[-2:])
+            gt_tum_lines = []
+            pred_tum_lines = []
+            total_images_output_from_model = pred_extrinsic.shape[1]
 
+            for i in range(total_images_output_from_model):
+                gt_matrix_4x4_W_C = gt_extrinsics_ordered[i]
+                pred_matrix_3x4_tensor_W_C = pred_extrinsic[0, i]
+                full_camera_name = camera_names_ordered[i]
+                
+                vehicle_id_from_name_parts = full_camera_name.split('_')
+                vehicle_id_from_name = vehicle_id_from_name_parts[0]
 
-gt_tum_lines = []
-pred_tum_lines = []
-total_images = pred_extrinsic.shape[1]
+                if gt_matrix_4x4_W_C is not None and vehicle_id_from_name == active_ego_vehicle_id:
+                    pred_matrix_4x4_W_C = np.eye(4)
+                    pred_matrix_4x4_W_C[:3, :] = pred_matrix_3x4_tensor_W_C.detach().cpu().numpy()
+                    
+                    tum_line_timestamp_id = i 
 
-for i in range(total_images):
-    gt_matrix_4x4_W_C = gt_extrinsics_ordered[i] # Calculated GT T_W_C (4x4) or None
-    pred_matrix_3x4_tensor_W_C = pred_extrinsic[0, i] # Predicted T_W_C (3x4)
-    full_camera_name = camera_names_ordered[i]
+                    gt_line = matrix_to_tum_line(gt_matrix_4x4_W_C, tum_line_timestamp_id)
+                    pred_line = matrix_to_tum_line(pred_matrix_4x4_W_C, tum_line_timestamp_id)
 
-    vehicle_id_from_name = full_camera_name.split('_')[0]
+                    gt_tum_lines.append(gt_line)
+                    pred_tum_lines.append(pred_line)
+            
+            # Output directory structure: BASE_OUTPUT_DIR_GLOBAL / scenario_name / timestamp_group_key / current_vehicle_case_folder_name /
+            output_dir_l1_scenario = os.path.join(BASE_OUTPUT_DIR_GLOBAL, active_scenario_name)
+            output_dir_l2_ts_group = os.path.join(output_dir_l1_scenario, str(timestamp_group_key))
+            final_output_directory_for_run = os.path.join(output_dir_l2_ts_group, current_vehicle_case_folder_name)
 
-    # Filter for ego vehicle and valid GT
-    if gt_matrix_4x4_W_C is not None and vehicle_id_from_name == ego_vehicle_id:
-        # Convert prediction T_W_C to 4x4 numpy
-        pred_matrix_4x4_W_C = np.eye(4)
-        pred_matrix_4x4_W_C[:3, :] = pred_matrix_3x4_tensor_W_C.detach().cpu().numpy()
+            os.makedirs(final_output_directory_for_run, exist_ok=True)
 
-        timestamp_id = i
+            gt_filename_path = os.path.join(final_output_directory_for_run, "gt_poses.txt")
+            pred_filename_path = os.path.join(final_output_directory_for_run, "pred_poses.txt")
 
-        # Convert both T_W_C matrices to TUM lines
-        gt_line = matrix_to_tum_line(gt_matrix_4x4_W_C, timestamp_id)
-        pred_line = matrix_to_tum_line(pred_matrix_4x4_W_C, timestamp_id)
+            with open(gt_filename_path, 'w') as f:
+                for line in gt_tum_lines:
+                    f.write(line + '\n')
+            print(f"        Ground truth poses (Ego: {active_ego_vehicle_id}) saved to: {gt_filename_path} ({len(gt_tum_lines)} poses)")
 
-        gt_tum_lines.append(gt_line)
-        pred_tum_lines.append(pred_line)
+            with open(pred_filename_path, 'w') as f:
+                for line in pred_tum_lines:
+                    f.write(line + '\n')
+            print(f"        Predicted poses (Ego: {active_ego_vehicle_id}) saved to: {pred_filename_path} ({len(pred_tum_lines)} poses)")
+            # --- Adapted original script's core logic ends here ---
 
-base_output_dir = "evo_input"
-scenario_output_dir = os.path.join(base_output_dir, scenario)
-vehicle_folder_name = f"{num_vehicles}_vehicle" if num_vehicles == 1 else f"{num_vehicles}_vehicles"
-timestamp_folder_name = f"{num_timestamps}_timestamp" if num_timestamps == 1 else f"{num_timestamps}_timestamps"
-final_output_dir = os.path.join(scenario_output_dir, vehicle_folder_name, timestamp_folder_name)
+    print("-----------------------------------")
 
-os.makedirs(final_output_dir, exist_ok=True)
-
-gt_filename = os.path.join(final_output_dir, "gt_poses.txt")
-pred_filename = os.path.join(final_output_dir, "pred_poses.txt")
-
-with open(gt_filename, 'w') as f:
-    for line in gt_tum_lines:
-        f.write(line + '\n')
-print(f"Ground truth poses (Ego vehicle only) saved to: {gt_filename} ({len(gt_tum_lines)} poses)")
-
-with open(pred_filename, 'w') as f:
-    for line in pred_tum_lines:
-        f.write(line + '\n')
-print(f"Predicted poses (Ego vehicle only) saved to: {pred_filename} ({len(pred_tum_lines)} poses)")
-
-
-print("\n--- Finished processing ---")
+print("\n--- All scenarios and cases processed ---")
