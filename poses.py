@@ -4,60 +4,72 @@ import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-# Assume vggt utility functions are available
 from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
+# --- SCENARIOS Configuration (Updated) ---
 SCENARIOS = {
     "2021_08_22_07_24_12": {
-        "vehicle_ids": ["5274", "5292"], "ego_vehicle_id": "5274", "base_timestamp_ref": "000078", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["5274", "5292"], "ego_vehicle_id": "5274", 
+        "base_timestamp_ref": 78, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [78, 80, 82, 84]}
     },
     "2021_08_23_13_10_47": {
-        "vehicle_ids": ["7694", "7703"], "ego_vehicle_id": "7694", "base_timestamp_ref": "000098", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["7694", "7703"], "ego_vehicle_id": "7694", 
+        "base_timestamp_ref": 98, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [98, 100, 102, 104]}
     },
     "2021_08_21_09_09_41": {
-        "vehicle_ids": ["9224", "9206"], "ego_vehicle_id": "9224", "base_timestamp_ref": "000142", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["9224", "9206"], "ego_vehicle_id": "9224", 
+        "base_timestamp_ref": 142, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [142, 144, 146, 148]}
     },
     "2021_08_22_09_43_53": {
-        "vehicle_ids": ["8323", "8332"], "ego_vehicle_id": "8323", "base_timestamp_ref": "000119", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["8323", "8332"], "ego_vehicle_id": "8323", 
+        "base_timestamp_ref": 119, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [119, 121, 123, 125]}
     },
     "2021_08_22_10_10_40": {
-        "vehicle_ids": ["8482", "8464"], "ego_vehicle_id": "8482", "base_timestamp_ref": "000175", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["8482", "8464"], "ego_vehicle_id": "8482", 
+        "base_timestamp_ref": 175, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [175, 177, 179, 181]}
     },
     "2021_08_23_12_13_48": {
-        "vehicle_ids": ["7365", "7356"], "ego_vehicle_id": "7365", "base_timestamp_ref": "000074", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["7365", "7356"], "ego_vehicle_id": "7365", 
+        "base_timestamp_ref": 74, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [74, 76, 78, 80]}
     },
     "2021_08_23_20_47_11": {
-        "vehicle_ids": ["409", "418"], "ego_vehicle_id": "409", "base_timestamp_ref": "000186", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["409", "418"], "ego_vehicle_id": "409", 
+        "base_timestamp_ref": 186, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [186, 188, 190, 192]}
     },
     "2021_08_23_22_31_01": {
-        "vehicle_ids": ["279", "252"], "ego_vehicle_id": "279", "base_timestamp_ref": "000256", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["279", "252"], "ego_vehicle_id": "279", 
+        "base_timestamp_ref": 256, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [256, 258, 260, 262]}
     },
     "2021_08_23_23_08_17": {
-        "vehicle_ids": ["565", "574"], "ego_vehicle_id": "565", "base_timestamp_ref": "000189", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["565", "574"], "ego_vehicle_id": "565", 
+        "base_timestamp_ref": 189, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [189, 191, 193, 195]}
     },
     "2021_08_24_09_25_42": {
-        "vehicle_ids": ["12963", "12954"], "ego_vehicle_id": "12963", "base_timestamp_ref": "000134", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["12963", "12954"], "ego_vehicle_id": "12963", 
+        "base_timestamp_ref": 134, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [134, 136, 138, 140]}
     },
     "2021_08_24_09_58_32": {
-        "vehicle_ids": ["13099", "13090"], "ego_vehicle_id": "13099", "base_timestamp_ref": "000226", "end_timestamp_ref": "PLACEHOLDER",
+        "vehicle_ids": ["13099", "13090"], "ego_vehicle_id": "13099", 
+        "base_timestamp_ref": 226, "end_timestamp_ref": 1000,
         "timestamps_data": {0: [226, 228, 230, 232]}
     }
 }
 
 # --- Helper Function ---
 def matrix_to_tum_line(matrix_4x4, timestamp_id_tum):
+    # Assumes input is T_W_C (Camera-to-World)
     t = matrix_4x4[:3, 3]
     R_mat = matrix_4x4[:3, :3]
     q = R.from_matrix(R_mat).as_quat()
@@ -85,6 +97,10 @@ BASE_OUTPUT_DIR_GLOBAL = "evo_vggt"
 # --- Main Processing Loop ---
 for scenario_name, scenario_config in SCENARIOS.items():
     print(f"\n[SCENARIO]: {scenario_name}")
+    # Example of accessing the new ref values (not used in core logic yet)
+    # current_base_ts_ref = scenario_config["base_timestamp_ref"]
+    # current_end_ts_ref = scenario_config["end_timestamp_ref"]
+    # print(f"  Reference Timestamps: Base={current_base_ts_ref}, End={current_end_ts_ref}")
     print("-----------------------------------")
 
     ego_id_for_filter = scenario_config["ego_vehicle_id"]
@@ -92,7 +108,6 @@ for scenario_name, scenario_config in SCENARIOS.items():
 
     for timestamp_group_key, integer_timestamp_list in scenario_config["timestamps_data"].items():
         
-        # Convert integer timestamps to zero-padded strings for this sequence group
         current_sequence_timestamps_str = [str(ts_int).zfill(6) for ts_int in integer_timestamp_list]
         num_frames_for_sequence = len(current_sequence_timestamps_str)
         
@@ -113,22 +128,18 @@ for scenario_name, scenario_config in SCENARIOS.items():
             current_vehicle_case_folder_name = run_case_config["case_folder_suffix"]
             current_vehicles_to_load_list = run_case_config["vehicles_to_process"]
             
-            # Variables for this specific run, matching original script's context
-            # These will be used by the adapted original block logic
             active_scenario_name = scenario_name
             active_ego_vehicle_id = ego_id_for_filter
             active_vehicle_ids_list = current_vehicles_to_load_list
             active_timestamps_list_str = current_sequence_timestamps_str
             
             active_num_vehicles = len(active_vehicle_ids_list)
-            active_num_timestamps_in_sequence = num_frames_for_sequence # Renamed for clarity within block
+            active_num_timestamps_in_sequence = num_frames_for_sequence
 
             print(f"\n    [RUN_CASE]: {current_vehicle_case_folder_name} for timestamp_group {timestamp_group_key}")
             print(f"      Vehicles: {active_vehicle_ids_list}, Timestamps: {active_timestamps_list_str}")
 
-            # --- Adapted original script's core logic starts here ---
             mode_path = os.path.join(BASE_PATH_GLOBAL, MODE_GLOBAL)
-            # scenario is now active_scenario_name, always provided
             scenario_fs_path = os.path.join(mode_path, active_scenario_name)
 
             image_names = []
@@ -200,7 +211,6 @@ for scenario_name, scenario_config in SCENARIOS.items():
                     gt_tum_lines.append(gt_line)
                     pred_tum_lines.append(pred_line)
             
-            # Output directory structure: BASE_OUTPUT_DIR_GLOBAL / scenario_name / timestamp_group_key / current_vehicle_case_folder_name /
             output_dir_l1_scenario = os.path.join(BASE_OUTPUT_DIR_GLOBAL, active_scenario_name)
             output_dir_l2_ts_group = os.path.join(output_dir_l1_scenario, str(timestamp_group_key))
             final_output_directory_for_run = os.path.join(output_dir_l2_ts_group, current_vehicle_case_folder_name)
@@ -219,7 +229,6 @@ for scenario_name, scenario_config in SCENARIOS.items():
                 for line in pred_tum_lines:
                     f.write(line + '\n')
             print(f"        Predicted poses (Ego: {active_ego_vehicle_id}) saved to: {pred_filename_path} ({len(pred_tum_lines)} poses)")
-            # --- Adapted original script's core logic ends here ---
 
     print("-----------------------------------")
 
