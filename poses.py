@@ -97,7 +97,7 @@ for scenario_name, scenario_config in SCENARIOS.items():
                     if yaml_key not in yaml_data_cache:
                         yaml_file_path = os.path.join(scenario_fs_path, vehicle_id_val, f"{timestamp_val_str}.yaml")
                         with open(yaml_file_path, 'r') as f:
-                            yaml_content = yaml.safe_load(f)
+                            yaml_content = yaml.load(f, Loader=yaml.FullLoader)
                         yaml_data_cache[yaml_key] = yaml_content
                     
                     current_vehicle_yaml_data = yaml_data_cache[yaml_key]
