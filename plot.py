@@ -37,7 +37,7 @@ def plot_rmse_distribution(df, output_filename="rmse_distribution_boxplot.png"):
         return
 
     plt.figure(figsize=(10, 6))
-    sns.boxplot(x="vehicle_case", y="rmse", data=df, palette="Set2")
+    sns.boxplot(x="vehicle_case", y="rmse", data=df, hue="vehicle_case", palette="Set2", legend=False, dodge=False)
     sns.stripplot(x="vehicle_case", y="rmse", data=df, color="0.25", size=4, jitter=True)
     plt.title("Distribution of APE RMSE by Vehicle Case", fontsize=16)
     plt.xlabel("Vehicle Case", fontsize=14)
