@@ -8,7 +8,7 @@ from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.load_fn import load_and_preprocess_images
 
-# --- SCENARIOS Configuration (Updated) ---
+# --- SCENARIOS Configuration
 SCENARIOS = {
     "2021_08_22_07_24_12": {
         "vehicle_ids": ["5274", "5292"], "ego_vehicle_id": "5274", 
@@ -97,7 +97,7 @@ BASE_OUTPUT_DIR_GLOBAL = "evo_vggt"
 # --- Main Processing Loop ---
 for scenario_name, scenario_config in SCENARIOS.items():
     print(f"\n[SCENARIO]: {scenario_name}")
-    # Example of accessing the new ref values (not used in core logic yet)
+    # Example of accessing the new ref values
     # current_base_ts_ref = scenario_config["base_timestamp_ref"]
     # current_end_ts_ref = scenario_config["end_timestamp_ref"]
     # print(f"  Reference Timestamps: Base={current_base_ts_ref}, End={current_end_ts_ref}")
